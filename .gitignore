@@ -1,0 +1,35 @@
+*.log
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store
+
+# Backend build outputs
+backend/bin/
+backend/dist/
+backend/cli-proxy-api
+backend/*.exe
+
+# Backend runtime state
+runtime/
+state/
+logs/
+config/config.local.yaml
+config/management-key.txt
+config/client-api-key.txt
+
+# Node / frontend outputs
+webui/node_modules/
+webui/dist/
+webui/.vite/
+
+# Local env
+backend/.env
+*.local
+
+# Editor / tooling
+.vscode/
+.idea/
+.playwright-cli/
+output/
+.publish-edge-profile/

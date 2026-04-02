@@ -1,0 +1,61 @@
+@use '../../styles/variables.scss' as *;
+
+.toggle {
+  position: fixed;
+  top: calc(var(--header-height, 64px) + 12px);
+  right: 16px;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 9999px;
+  background: var(--bg-primary);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+
+.button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 10px;
+  height: 28px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 28px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+}
+
+.active {
+  background: var(--primary-color);
+  color: #fff;
+}
+
+@media (max-width: $breakpoint-mobile) {
+  .toggle {
+    top: calc(var(--header-height, 64px) + 10px);
+    right: 12px;
+  }
+
+  .button {
+    padding: 0 9px;
+    height: 26px;
+    line-height: 26px;
+  }
+}

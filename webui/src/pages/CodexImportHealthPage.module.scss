@@ -1,0 +1,291 @@
+@use '../styles/variables' as *;
+@use '../styles/mixins' as *;
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  min-height: 100%;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.description {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: $radius-md;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.noticeBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 4px 8px;
+  border-radius: $radius-full;
+  background: rgba($primary-color, 0.12);
+  color: var(--primary-color);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.summaryGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+
+  @include tablet {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.summaryCard {
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.summaryLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.summaryValue {
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.problemText {
+  color: var(--danger-color);
+}
+
+.warningText {
+  color: var(--warning-color, #d97706);
+}
+
+.filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filterItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+}
+
+.statusSelect {
+  min-width: 156px;
+}
+
+.errorBox {
+  padding: 10px 12px;
+  border-radius: $radius-md;
+  border: 1px solid var(--danger-color);
+  background: rgba($error-color, 0.08);
+  color: var(--danger-color);
+  font-size: 12px;
+}
+
+.tableWrapper {
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 1220px;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 12px;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+  }
+
+  th {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-tertiary);
+    background: var(--bg-secondary);
+    white-space: nowrap;
+  }
+
+  td {
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+
+  tbody tr:hover {
+    background: var(--bg-secondary);
+  }
+}
+
+.providerCell,
+.discoveryCell,
+.runtimeCell,
+.importCell,
+.actionCell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.providerCell {
+  min-width: 220px;
+}
+
+.providerName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.providerSub {
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.inlineMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.subtleBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: $radius-full;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: $radius-full;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.statusHealthy {
+  color: var(--success-badge-text, #065f46);
+  background: var(--success-badge-bg, #d1fae5);
+  border: 1px solid var(--success-badge-border, #6ee7b7);
+}
+
+.statusProblem {
+  color: var(--failure-badge-text, #991b1b);
+  background: var(--failure-badge-bg, #fee2e2);
+  border: 1px solid var(--failure-badge-border, #fca5a5);
+}
+
+.statusWarning {
+  color: var(--warning-color, #92400e);
+  background: rgba($warning-color, 0.12);
+  border: 1px solid rgba($warning-color, 0.28);
+}
+
+.statusNeutral {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.runtimeModelList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 290px;
+}
+
+.runtimeModelItem {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border-radius: $radius-md;
+  border: 1px solid var(--border-color);
+  background: rgba($error-color, 0.04);
+}
+
+.runtimeModelInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: $radius-full;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.emptyText {
+  color: var(--text-tertiary);
+}

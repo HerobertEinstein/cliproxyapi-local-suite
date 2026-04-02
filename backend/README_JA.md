@@ -59,6 +59,7 @@ GLM CODING PLANを10%割引で取得：https://z.ai/subscribe?ic=8JVLJQFSKB
 - OpenAI Codexのマルチアカウント負荷分散
 - 設定によるOpenAI互換アップストリームプロバイダー（例：OpenRouter）
 - `models` を明示していない `openai-compatibility` プロバイダー向けのモデル自動検出
+- 予約済みの動的ポインタ `current` と編集可能な静的グループによる logical model groups
 - プロキシ埋め込み用の再利用可能なGo SDK（`docs/sdk-usage.md`を参照）
 
 ## OpenAI-compatible モデル検出
@@ -66,6 +67,85 @@ GLM CODING PLANを10%割引で取得：https://z.ai/subscribe?ic=8JVLJQFSKB
 - `openai-compatibility.models` を明示している場合は、その宣言済み一覧が常に有効モデル集合として使われます。
 - `models` が未宣言の場合、CLIProxyAPI は起動時および設定のホットリロード時に `/v1/models` または `/models` を自動検出し、結果をローカルにキャッシュして、有効モデル集合のフォールバックとして使用します。
 - 設定のホットリロード時は、「追加または変更された、かつ `models` をまだ明示していない `openai-compatibility` プロバイダー」だけを再走査し、毎回すべての同種プロバイダーを全量再走査することはありません。
+
+## Logical model groups（動的ポインタ + 静的グループ）
+
+CLIProxyAPI では、「クライアントに見せるモデル名」と「実際のアップストリーム target model」を分けて管理できます。
+
+- `current` は**予約済みの動的ポインタ**です。別名は常に `current` で、削除できず、自分自身を参照することもできません。
+- `static` の各項目は**静的グループ**です。安定したクライアント向け別名 `alias` を、実際のアップストリーム target `target` に対応付けます。
+- `current` 自体は `target` を直接保持せず、静的グループを指す `ref` を保持します。そのため、クライアント設定を変えずにアクティブな target だけを切り替えられます。
+
+例：
+
+```yaml
+logical-model-groups:
+  current:
+    ref: gpt-5.4-mini
+  static:
+    - alias: gpt-5.2
+      target: gpt-5.2
+      reasoning:
+        mode: request
+    - alias: gpt-5.4-mini
+      target: gpt-5.4-mini
+      reasoning:
+        mode: request
+    - alias: claude-opus-4-6
+      target: claude-opus-4-6
+      reasoning:
+        mode: request
+```
+
+この仕組みは主に次の2つの用途に向いています。
+
+- **動的ポインタ**: クライアント側はずっと `current` を使い続け、実際にどのモデルへ向けるかはサーバー側や管理UIで `current.ref` を切り替える。
+- **静的グループ**: `gpt-5.2`、`gpt-5.4-mini`、`claude-opus-4-6` のような安定した別名をクライアントに見せ、手動選択できるようにする。
+
+### reasoning の動作
+
+各静的グループには `reasoning` を定義できます。
+
+- `mode: request`: クライアントが要求した suffix / effort をそのまま使います。
+  例: `current(low)` -> `gpt-5.4-mini(low)`
+- `mode: group` + `effort: high`: グループ定義側の effort を優先します。
+  例: `current(low)` -> `gpt-5.4-mini(high)`
+
+なお、`target` 自体にすでに suffix が付いている場合は、その明示的な suffix が優先されます。
+
+### 実行時の可視性ルール
+
+- logical model groups は実行時の alias chain として投影され、対応チャネルではクライアントから見えるモデルとして公開されます。
+- ただし、対応する provider / auth がその `target` を実際にサポートしている場合にのみ、その静的 alias や `current` が登録されます。
+- つまり、logical model groups によって「実際には使えないのに見えているだけ」のモデル一覧を偽装することはありません。
+
+### Management API
+
+- `GET /v0/management/logical-model-groups`
+- `PUT /v0/management/logical-model-groups/current`
+- `PATCH /v0/management/logical-model-groups/current`
+- `POST /v0/management/logical-model-groups/static`
+- `DELETE /v0/management/logical-model-groups/static/:alias`
+
+よく使う payload:
+
+- 動的ポインタの切り替え:
+
+```json
+{"ref":"gpt-5.4-mini"}
+```
+
+- 静的グループの追加または更新:
+
+```json
+{"alias":"claude-opus-4-6","target":"claude-opus-4-6","reasoning":{"mode":"request"}}
+```
+
+補足:
+
+- `current` は予約名のため、静的グループとして作成できず、削除もできません。
+- `current.ref` から参照されている静的グループは削除できません。
+- Management API が永続化するのは `current.target` ではなく `current.ref` です。
 
 ## はじめに
 

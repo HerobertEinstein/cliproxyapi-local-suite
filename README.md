@@ -2,6 +2,18 @@
 
 面向 Windows 本机使用的 CLIProxyAPI 单仓库发布版。
 
+## 相对直接使用原版 CLIProxyAPI，多了什么
+
+这个 Local Suite 不是另起一套后端协议，而是在保留上游 CLIProxyAPI 后端与管理面板源码的基础上，额外补了面向 Windows 本机使用和公开发布的整套外层包装：
+
+- 把 `backend/`、`webui/`、`ops/windows/`、`docs/` 收敛到同一个仓库里，便于本地复现、打包和发布
+- 额外提供 `ops/windows/` 下的一键脚本，用于本地配置同步、启动、停止和打开管理面板
+- 额外补齐根级 `README.md`、`docs/config.md`、`docs/release.md`、`docs/security.md`，把“如何运行、如何发布、哪些内容不能入仓”说清楚
+- 额外明确 Source-First 的发布边界：仓库保留源码和可复现脚本，真实密钥、认证文件、运行态目录、日志和浏览器 profile 不入仓
+- 额外把管理面板的两种分发方式说清楚：运行时由后端拉取 `management.html`，或者自行构建固定版再随 Release 分发
+
+如果你关心的是核心代理能力、协议转换、OAuth、模型映射、路由与管理接口，这些仍以后端 `backend/` 中的 CLIProxyAPI 实现为准；这个仓库新增的重点是“本地套件化”和“公开发布整理”，不是重写核心内核。
+
 这个仓库只保留四类内容：
 
 - `backend/`：CLIProxyAPI 后端源码

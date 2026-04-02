@@ -17,6 +17,7 @@ logs/
 config/config.local.yaml
 config/management-key.txt
 config/client-api-key.txt
+config/static/
 
 # Node / frontend outputs
 webui/node_modules/

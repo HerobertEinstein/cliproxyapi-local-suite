@@ -2,11 +2,12 @@
 
 面向 Windows 本机使用的 CLIProxyAPI 单仓库发布版。
 
-这个仓库只保留三类内容：
+这个仓库只保留四类内容：
 
 - `backend/`：CLIProxyAPI 后端源码
 - `webui/`：管理面板源码
 - `ops/windows/`：公开可复现的本地启动、停止、配置脚本
+- `docs/`：公开使用说明与发布说明
 
 不纳入仓库的内容：
 
@@ -21,7 +22,6 @@ backend/        Go 后端源码
 webui/          React 管理面板源码
 ops/windows/    Windows 本地运维脚本
 docs/           公开使用说明与发布说明
-scripts/        构建/打包/校验脚本（待补充）
 ```
 
 ## 本地运行
@@ -50,12 +50,24 @@ scripts/        构建/打包/校验脚本（待补充）
    .\ops\windows\Open-CLIProxyAPI-GUI.ps1
    ```
 
+   这个脚本会先确保服务可用，再打开 `http://127.0.0.1:8317/management.html`。
+
 内置 Gemini / Antigravity / iFlow OAuth 登录不会再使用仓库内置凭据；需要先按 `docs/config.md` 注入对应环境变量。
+
+## 管理面板来源
+
+- `http://127.0.0.1:8317/management.html` 由后端路由提供，不是直接读取仓库里的 `webui/` 源码目录。
+- 默认情况下，后端会按 `remote-management.panel-github-repository` 拉取最新 `management.html`。
+- 首次拉取后的本地文件默认落在 `config/static/management.html`；如果设置了 `WRITABLE_PATH`，则改为 `$env:WRITABLE_PATH/static/management.html`。
+- `remote-management.disable-control-panel: true` 会关闭控制面板路由。
+- `remote-management.disable-auto-update-panel: true` 会关闭后台自动更新；本地文件缺失时仍会按需补拉一次。
+- `webui/` 目录主要用于二次开发或自建固定版前端，不是正常本地启动的前置条件。
 
 ## 设计原则
 
 - 默认仅监听 `127.0.0.1`
-- 本地运行态全部落在仓库外的 `runtime/`、`config/`、`logs/` 目录
+- 本地运行态默认落在仓库根目录下未跟踪的 `runtime/`、`config/`、`logs/` 目录
+- 管理面板缓存文件默认落在未跟踪的 `config/static/`
 - 公开脚本不自动注入 management key，不捆绑个人工作流
 - 公开仓库只提供可复现方法，不提交运行结果
 

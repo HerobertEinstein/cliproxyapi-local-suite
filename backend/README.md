@@ -59,6 +59,7 @@ Get 10% OFF GLM CODING PLAN：https://z.ai/subscribe?ic=8JVLJQFSKB
 - OpenAI Codex multi-account load balancing
 - OpenAI-compatible upstream providers via config (e.g., OpenRouter)
 - `openai-compatibility` model auto-discovery for providers without explicit `models`
+- Logical model groups with the reserved dynamic pointer `current` plus editable static groups
 - Reusable Go SDK for embedding the proxy (see `docs/sdk-usage.md`)
 
 ## OpenAI-compatible model discovery
@@ -66,6 +67,79 @@ Get 10% OFF GLM CODING PLAN：https://z.ai/subscribe?ic=8JVLJQFSKB
 - If `openai-compatibility.models` is declared, the declared list is always used as the effective model set.
 - If `models` is not declared, CLIProxyAPI automatically probes `/v1/models` or `/models` on startup and config reload, caches the result locally, and uses it as the fallback effective model set.
 - Config reload only rescans added or changed `openai-compatibility` providers that still do not declare `models`; it does not rescan every such provider on every reload.
+
+## Logical model groups (dynamic pointer + static groups)
+
+CLIProxyAPI can separate the model name seen by clients from the real upstream target model:
+
+- `current` is a reserved **dynamic pointer**. Its alias is always `current`, it cannot be deleted, and it cannot point to itself.
+- Each item in `static` is a **static group**: a stable client-facing alias (`alias`) mapped to a real upstream target (`target`).
+- `current` does **not** persist a direct `target`; it persists a `ref` to one static group. This lets you switch the active target without changing client config.
+
+Example:
+
+```yaml
+logical-model-groups:
+  current:
+    ref: gpt-5.4-mini
+  static:
+    - alias: gpt-5.2
+      target: gpt-5.2
+      reasoning:
+        mode: request
+    - alias: gpt-5.4-mini
+      target: gpt-5.4-mini
+      reasoning:
+        mode: request
+    - alias: claude-opus-4-6
+      target: claude-opus-4-6
+      reasoning:
+        mode: request
+```
+
+Typical usage:
+
+- **Dynamic pointer**: clients keep using `current`, while the server/UI changes `current.ref`.
+- **Static groups**: clients can still select stable aliases such as `gpt-5.2`, `gpt-5.4-mini`, or `claude-opus-4-6`.
+
+### How reasoning works
+
+Each static group can define `reasoning`:
+
+- `mode: request`: preserve the suffix / effort requested by the client.
+  Example: `current(low)` -> `gpt-5.4-mini(low)`.
+- `mode: group` + `effort: high`: the group-defined effort wins.
+  Example: `current(low)` -> `gpt-5.4-mini(high)`.
+
+If the `target` already includes a suffix, that explicit suffix wins.
+
+### Runtime visibility rules
+
+- Logical model groups are projected into runtime alias chains and exposed as client-visible models on supported channels.
+- A provider / auth only exposes a static alias or `current` when its effective model set really supports the referenced target.
+- In other words, logical model groups do not fake availability for an upstream that cannot actually serve that model.
+
+### Management API
+
+- `GET /v0/management/logical-model-groups`
+- `PUT /v0/management/logical-model-groups/current`
+- `PATCH /v0/management/logical-model-groups/current`
+- `POST /v0/management/logical-model-groups/static`
+- `DELETE /v0/management/logical-model-groups/static/:alias`
+
+Common payloads:
+
+- Switch the dynamic pointer:
+
+```json
+{"ref":"gpt-5.4-mini"}
+```
+
+- Add or update one static group:
+
+```json
+{"alias":"claude-opus-4-6","target":"claude-opus-4-6","reasoning":{"mode":"request"}}
+```
 
 ## Getting Started
 

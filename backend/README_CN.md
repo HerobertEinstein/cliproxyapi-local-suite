@@ -59,6 +59,7 @@ GLM CODING PLAN 是专为AI编码打造的订阅套餐，每月最低仅需20元
 - 支持 OpenAI Codex 多账户轮询
 - 通过配置接入上游 OpenAI 兼容提供商（例如 OpenRouter）
 - 支持对未显式声明 `models` 的 `openai-compatibility` provider 自动发现模型集
+- 支持逻辑模型组：保留动态指针 `current` + 可增删的静态组
 - 可复用的 Go SDK（见 `docs/sdk-usage_CN.md`）
 
 ## OpenAI-compatible 模型发现
@@ -66,6 +67,85 @@ GLM CODING PLAN 是专为AI编码打造的订阅套餐，每月最低仅需20元
 - 如果 `openai-compatibility.models` 已手写声明，则始终以手写声明作为有效模型集。
 - 如果未声明 `models`，CLIProxyAPI 会在启动和配置热重载时自动探测 `/v1/models` 或 `/models`，将结果缓存到本地，并把发现结果作为兜底的有效模型集。
 - 配置热重载时，只会重新扫描“新增或已变更且仍未声明 `models`”的 `openai-compatibility` provider，不会在每次热重载时全量重扫所有同类 provider。
+
+## 逻辑模型组（动态指针 + 静态组）
+
+CLIProxyAPI 支持把“客户端看到的模型名”与“实际上游目标模型”拆开管理：
+
+- `current` 是一个**保留的动态指针**，别名固定为 `current`，不能删除，也不能指向自己。
+- `static` 里的每一项都是一个**静态组**：客户端可见的稳定别名 `alias`，映射到真实目标模型 `target`。
+- `current` 自己**不直接保存 `target`**，而是通过 `ref` 指向某个静态组；因此你只需要切换 `current.ref`，客户端配置就不用跟着改。
+
+示例：
+
+```yaml
+logical-model-groups:
+  current:
+    ref: gpt-5.4-mini
+  static:
+    - alias: gpt-5.2
+      target: gpt-5.2
+      reasoning:
+        mode: request
+    - alias: gpt-5.4-mini
+      target: gpt-5.4-mini
+      reasoning:
+        mode: request
+    - alias: claude-opus-4-6
+      target: claude-opus-4-6
+      reasoning:
+        mode: request
+```
+
+这套机制适合两类场景：
+
+- **动态指针**：让客户端长期只填 `current`，真正切到哪一个模型由服务端或管理面板决定。
+- **静态组**：给客户端暴露稳定的模型别名（例如 `gpt-5.2`、`gpt-5.4-mini`、`claude-opus-4-6`），方便手动选择。
+
+### 思考强度（reasoning）怎么生效
+
+每个静态组都可以带 `reasoning`：
+
+- `mode: request`：保留客户端请求里的 suffix / effort。
+  例如客户端请求 `current(low)`，若 `current.ref -> gpt-5.4-mini`，最终会解析为 `gpt-5.4-mini(low)`。
+- `mode: group` + `effort: high`：以组定义为准，组内固定思考强度。
+  例如客户端请求 `current(low)`，最终仍会解析为 `gpt-5.4-mini(high)`。
+
+如果 `target` 自己已经带 suffix，那么 `target` 上已有的 suffix 优先。
+
+### 运行时可见性规则
+
+- 逻辑模型组会被投影成运行时别名链，作为客户端可见模型出现在支持的通道中。
+- 但**只有当某个 provider / auth 真的支持对应 `target` 时**，CLIProxyAPI 才会为它注册这个静态组或 `current`。
+- 也就是说，逻辑模型组不会伪造一个实际上游不可用的模型列表。
+
+### 管理 API
+
+- `GET /v0/management/logical-model-groups`
+- `PUT /v0/management/logical-model-groups/current`
+- `PATCH /v0/management/logical-model-groups/current`
+- `POST /v0/management/logical-model-groups/static`
+- `DELETE /v0/management/logical-model-groups/static/:alias`
+
+常见操作：
+
+- 切换动态指针：
+
+```json
+{"ref":"gpt-5.4-mini"}
+```
+
+- 新增或更新静态组：
+
+```json
+{"alias":"claude-opus-4-6","target":"claude-opus-4-6","reasoning":{"mode":"request"}}
+```
+
+补充说明：
+
+- `current` 是保留名，不能作为静态组创建，也不能删除。
+- 被 `current.ref` 指向的静态组不能删除。
+- 管理 API 持久化的是 `current.ref`，而不是 `current.target`。
 
 ## 新手入门
 

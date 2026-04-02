@@ -15,6 +15,21 @@
 - 真实配置、密钥、认证文件、日志、浏览器 profile
 - 个人化导入脚本和第三方账号同步脚本
 
+## 后端新增：动态指针 / 逻辑模型组
+
+当前后端已经补上 logical model groups 这套能力，用来把“客户端看到的模型名”和“真实上游 target model”拆开管理：
+
+- `current` 是保留的**动态指针**，客户端可以长期只填 `current`
+- `static` 是可增删的**静态组**，每个 `alias` 映射一个真实 `target`
+- `current` 通过 `ref` 指向某个静态组，因此切换目标模型时不需要改客户端配置
+- 每个静态组还可以定义 `reasoning`，决定是沿用客户端请求强度，还是由组内固定思考强度
+
+仓库首页这里只做入口说明；完整字段、行为规则和 Management API 用法见：
+
+- `backend/README_CN.md`
+- `backend/README.md`
+- `backend/README_JA.md`
+
 ## 仓库结构
 
 ```text

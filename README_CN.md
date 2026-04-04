@@ -8,6 +8,23 @@
 
 您可以使用本地或多账户的CLI方式，通过任何与 OpenAI（包括Responses）/Gemini/Claude 兼容的客户端和SDK进行访问。
 
+## 本分支说明
+
+这个仓库是个人本地套件分支，不是官方上游仓库。
+
+相较于上游 CLIProxyAPI，这个分支更侧重本地 Windows 使用、脚本化维护，以及更安全的自托管路由能力：
+
+- 逻辑模型组：保留动态指针 `current`，并支持可编辑的静态组
+- `openai-compatibility` provider 在未声明 `models` 时自动探测模型
+- 配置热重载时仅对新增或变更、且仍未声明 `models` 的 provider 做增量重扫
+- 提供用于切换 `current` 和维护静态逻辑组的管理 API，便于在 Web UI 或脚本中维护
+- 补充 Windows Web UI 启动链与 Edge CDP 接管说明，方便自动化稳定附着到同一真实 Edge 会话
+- Gemini / Antigravity / iFlow 的 OAuth client credentials 已外置化，优先从 auth metadata 或环境变量解析，不再硬编码在仓库里
+
+如果你只需要原版行为和官方发布节奏，请使用官方上游仓库：
+
+- 上游仓库：`https://github.com/router-for-me/CLIProxyAPI`
+
 ## 赞助商
 
 [![bigmodel.cn](https://assets.router-for.me/chinese-5-0.jpg)](https://www.bigmodel.cn/claude-code?ic=RRVJPB5SII)

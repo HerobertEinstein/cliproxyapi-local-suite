@@ -8,6 +8,23 @@ It now also supports OpenAI Codex (GPT models) and Claude Code via OAuth.
 
 So you can use local or multi-account CLI access with OpenAI(include Responses)/Gemini/Claude-compatible clients and SDKs.
 
+## This fork
+
+This repository is a personal local-suite fork, not the official upstream repository.
+
+Compared with upstream CLIProxyAPI, this fork is focused on local Windows usage, scriptable maintenance, and safer self-hosted routing:
+
+- logical model groups with a reserved dynamic pointer `current` plus editable static groups
+- automatic `openai-compatibility` model discovery when a provider does not declare `models`
+- incremental rescans for added or changed `openai-compatibility` providers instead of full rescans on every reload
+- management APIs for switching `current` and maintaining static logical groups from the Web UI / scripts
+- Windows Web UI launcher / Edge CDP launch-chain guidance for stable browser attachment and automation
+- OAuth client credentials externalized for Gemini / Antigravity / iFlow, resolved from auth metadata or environment variables instead of hardcoded secrets
+
+If you only want the original project behavior and release cadence, use the official upstream repository:
+
+- upstream: `https://github.com/router-for-me/CLIProxyAPI`
+
 ## Sponsor
 
 [![z.ai](https://assets.router-for.me/english-5-0.jpg)](https://z.ai/subscribe?ic=8JVLJQFSKB)

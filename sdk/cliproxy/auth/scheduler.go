@@ -212,6 +212,14 @@ func (s *authScheduler) pickSingle(ctx context.Context, provider, model string, 
 
 // pickMixed returns the next auth and provider for a mixed-provider request.
 func (s *authScheduler) pickMixed(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) (*Auth, string, error) {
+	return s.pickMixedInternal(ctx, providers, model, opts, tried, false)
+}
+
+func (s *authScheduler) pickMixedWithProviderOrder(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) (*Auth, string, error) {
+	return s.pickMixedInternal(ctx, providers, model, opts, tried, true)
+}
+
+func (s *authScheduler) pickMixedInternal(ctx context.Context, providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}, preferProviderOrder bool) (*Auth, string, error) {
 	if s == nil {
 		return nil, "", &Error{Code: "auth_not_found", Message: "no auth available"}
 	}
@@ -288,6 +296,20 @@ func (s *authScheduler) pickMixed(ctx context.Context, providers []string, model
 		}
 	}
 	if !hasCandidate {
+		return nil, "", s.mixedUnavailableErrorLocked(normalized, model, tried)
+	}
+
+	if preferProviderOrder {
+		for providerIndex, providerKey := range normalized {
+			shard := candidateShards[providerIndex]
+			if shard == nil {
+				continue
+			}
+			picked := shard.pickReadyAtPriorityLocked(false, bestPriority, s.strategy, predicate)
+			if picked != nil {
+				return picked, providerKey, nil
+			}
+		}
 		return nil, "", s.mixedUnavailableErrorLocked(normalized, model, tried)
 	}
 

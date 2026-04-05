@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -106,4 +107,60 @@ func TestLogicalModelGroupResolvedTarget(t *testing.T) {
 			t.Fatalf("expected explicit target suffix to win, got %q", got)
 		}
 	})
+}
+
+func TestSanitizeLogicalModelGroups_NormalizesPreferredProviders(t *testing.T) {
+	cfg := mustUnmarshalLogicalModelGroupsConfig(t, `
+logical-model-groups:
+  current:
+    ref: gpt-5.4
+  static:
+    - alias: gpt-5.4
+      target: gpt-5.4
+      preferred-providers:
+        - " Sub2 "
+        - "saberrc"
+        - "sub2"
+        - ""
+`)
+
+	group, ok := cfg.ResolveLogicalModelGroupEntry("gpt-5.4")
+	if !ok {
+		t.Fatal("expected static logical model group to resolve")
+	}
+
+	want := []string{"sub2", "saberrc"}
+	if !reflect.DeepEqual(group.PreferredProviders, want) {
+		t.Fatalf("preferred providers = %#v, want %#v", group.PreferredProviders, want)
+	}
+}
+
+func TestResolveLogicalModelGroupEntry_CurrentRefPreservesPreferredProviders(t *testing.T) {
+	cfg := mustUnmarshalLogicalModelGroupsConfig(t, `
+logical-model-groups:
+  current:
+    ref: gpt-5.4
+  static:
+    - alias: gpt-5.4
+      target: gpt-5.4
+      preferred-providers:
+        - sub2
+        - saberrc
+`)
+
+	group, ok := cfg.ResolveLogicalModelGroupEntry("current(low)")
+	if !ok {
+		t.Fatal("expected current logical model group to resolve")
+	}
+
+	if group.Alias != LogicalModelGroupAliasCurrent {
+		t.Fatalf("alias = %q, want %q", group.Alias, LogicalModelGroupAliasCurrent)
+	}
+	if group.Target != "gpt-5.4" {
+		t.Fatalf("target = %q, want %q", group.Target, "gpt-5.4")
+	}
+	want := []string{"sub2", "saberrc"}
+	if !reflect.DeepEqual(group.PreferredProviders, want) {
+		t.Fatalf("preferred providers = %#v, want %#v", group.PreferredProviders, want)
+	}
 }

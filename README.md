@@ -101,6 +101,7 @@ CLIProxyAPI can separate the model name seen by clients from the real upstream t
 
 - `current` is a reserved **dynamic pointer**. Its alias is always `current`, it cannot be deleted, and it cannot point to itself.
 - Each item in `static` is a **static group**: a stable client-facing alias (`alias`) mapped to a real upstream target (`target`).
+- A static group can also declare `preferred-providers`, meaning which providers should be tried first for this logical group during mixed-provider routing.
 - `current` does **not** persist a direct `target`; it persists a `ref` to one static group. This lets you switch the active target without changing client config.
 
 Example:
@@ -116,6 +117,9 @@ logical-model-groups:
         mode: request
     - alias: gpt-5.4-mini
       target: gpt-5.4-mini
+      preferred-providers:
+        - codex
+        - claude
       reasoning:
         mode: request
     - alias: claude-opus-4-6
@@ -128,6 +132,21 @@ Typical usage:
 
 - **Dynamic pointer**: clients keep using `current`, while the server/UI changes `current.ref`.
 - **Static groups**: clients can still select stable aliases such as `gpt-5.2`, `gpt-5.4-mini`, or `claude-opus-4-6`.
+
+### Preferred provider order (`preferred-providers`)
+
+- `preferred-providers` is a **logical-group-level** provider order hint. It only affects mixed-provider routing for that logical group.
+- Behavior: try the first listed provider first; if all auths for that provider are cooling down or unavailable for the current model, automatically continue to the next one.
+- Providers not listed are not removed; they stay at the tail as fallback candidates.
+- This is not a CCS-style per-app queue and not a separate health state machine. It is simply a way to express “which provider should this logical group prefer first”.
+
+### Relationship to `round-robin` / `fill-first`
+
+- `preferred-providers` controls **which provider is attempted first across providers**.
+- The global `routing.strategy` still applies, but mainly inside the provider that has already been chosen:
+  - `round-robin`: rotate across available credentials within that provider
+  - `fill-first`: keep using the first available credential within that provider
+- In short: logical model groups decide “which upstream first”, and the existing routing strategy still decides “which key / auth inside that upstream”.
 
 ### How reasoning works
 
@@ -165,7 +184,7 @@ Common payloads:
 - Add or update one static group:
 
 ```json
-{"alias":"claude-opus-4-6","target":"claude-opus-4-6","reasoning":{"mode":"request"}}
+{"alias":"claude-opus-4-6","target":"claude-opus-4-6","preferred-providers":["codex","claude"],"reasoning":{"mode":"request"}}
 ```
 
 ## Getting Started

@@ -97,6 +97,9 @@ logical-model-groups:
 	if len(h.cfg.LogicalModelGroups.Static) != 2 {
 		t.Fatalf("expected 2 static groups after create, got %d", len(h.cfg.LogicalModelGroups.Static))
 	}
+	if got := h.cfg.LogicalModelGroups.Static[1].PreferredProviders; len(got) != 0 {
+		t.Fatalf("expected empty preferred providers for legacy payload, got %#v", got)
+	}
 
 	deleteRec := httptest.NewRecorder()
 	deleteCtx, r := gin.CreateTestContext(deleteRec)
@@ -111,6 +114,47 @@ logical-model-groups:
 	}
 	if len(h.cfg.LogicalModelGroups.Static) != 1 {
 		t.Fatalf("expected only referenced static group to remain, got %d", len(h.cfg.LogicalModelGroups.Static))
+	}
+}
+
+func TestPostLogicalModelGroupStatic_PersistsPreferredProviders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("logical-model-groups:\n  current:\n    ref: gpt-5.4\n  static:\n    - alias: gpt-5.4\n      target: gpt-5.4\n"), 0o600); err != nil {
+		t.Fatalf("failed to seed config: %v", err)
+	}
+
+	h := NewHandler(mustLoadManagementLogicalModelGroupsConfig(t, `
+logical-model-groups:
+  current:
+    ref: gpt-5.4
+  static:
+    - alias: gpt-5.4
+      target: gpt-5.4
+`), configPath, nil)
+
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v0/management/logical-model-groups/static", strings.NewReader(`{"alias":"gpt-5.4","target":"gpt-5.4","preferred-providers":[" codex ","claude","codex"]}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	h.PostLogicalModelGroupStatic(ctx)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d with body %s", http.StatusOK, rec.Code, rec.Body.String())
+	}
+	got := h.cfg.LogicalModelGroups.Static[0].PreferredProviders
+	want := []string{"codex", "claude"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("preferred providers = %#v, want %#v", got, want)
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("failed to read persisted config: %v", err)
+	}
+	if !strings.Contains(string(data), "preferred-providers:") {
+		t.Fatalf("expected persisted config to contain preferred-providers, got %s", string(data))
 	}
 }
 
@@ -177,6 +221,9 @@ logical-model-groups:
   static:
     - alias: gpt-5.4
       target: gpt-5.4
+      preferred-providers:
+        - codex
+        - claude
 `), nil)
 
 	rec := httptest.NewRecorder()
@@ -206,6 +253,18 @@ logical-model-groups:
 	}
 	if _, exists := current["target"]; exists {
 		t.Fatalf("expected current target to stay hidden in API payload, got %#v", current)
+	}
+	staticGroups, ok := payload["static"].([]any)
+	if !ok || len(staticGroups) != 1 {
+		t.Fatalf("expected static payload, got %#v", payload["static"])
+	}
+	group, ok := staticGroups[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected static group object, got %#v", staticGroups[0])
+	}
+	providers, ok := group["preferred-providers"].([]any)
+	if !ok || len(providers) != 2 {
+		t.Fatalf("expected preferred-providers array, got %#v", group["preferred-providers"])
 	}
 }
 

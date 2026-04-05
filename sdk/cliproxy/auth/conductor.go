@@ -2528,6 +2528,69 @@ func shouldRetrySchedulerPick(err error) bool {
 	return authErr.Code == "auth_not_found" || authErr.Code == "auth_unavailable"
 }
 
+func normalizePreferredProviderOrder(providers []string, preferred []string) []string {
+	if len(providers) == 0 {
+		return nil
+	}
+	available := make(map[string]struct{}, len(providers))
+	ordered := make([]string, 0, len(providers))
+	for _, provider := range providers {
+		key := strings.ToLower(strings.TrimSpace(provider))
+		if key == "" {
+			continue
+		}
+		if _, exists := available[key]; exists {
+			continue
+		}
+		available[key] = struct{}{}
+	}
+	seen := make(map[string]struct{}, len(available))
+	for _, provider := range preferred {
+		key := strings.ToLower(strings.TrimSpace(provider))
+		if key == "" {
+			continue
+		}
+		if _, ok := available[key]; !ok {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		ordered = append(ordered, key)
+	}
+	for _, provider := range providers {
+		key := strings.ToLower(strings.TrimSpace(provider))
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		ordered = append(ordered, key)
+	}
+	if len(ordered) == 0 {
+		return nil
+	}
+	return ordered
+}
+
+func (m *Manager) preferredProviderOrderForRouteModel(routeModel string, providers []string) []string {
+	if m == nil || strings.TrimSpace(routeModel) == "" || len(providers) == 0 {
+		return nil
+	}
+	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
+	if cfg == nil {
+		return nil
+	}
+	group, ok := cfg.ResolveLogicalModelGroupEntry(routeModel)
+	if !ok || len(group.PreferredProviders) == 0 {
+		return nil
+	}
+	return normalizePreferredProviderOrder(providers, group.PreferredProviders)
+}
+
 func (m *Manager) routeAwareSelectionRequired(auth *Auth, routeModel string) bool {
 	if auth == nil || strings.TrimSpace(routeModel) == "" {
 		return false
@@ -2783,10 +2846,17 @@ func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model s
 		m.mu.RUnlock()
 	}
 
-	selected, providerKey, errPick := m.scheduler.pickMixed(ctx, eligibleProviders, model, opts, tried)
+	preferredOrder := m.preferredProviderOrderForRouteModel(model, eligibleProviders)
+	pickMixed := m.scheduler.pickMixed
+	if len(preferredOrder) > 0 {
+		pickMixed = m.scheduler.pickMixedWithProviderOrder
+		eligibleProviders = preferredOrder
+	}
+
+	selected, providerKey, errPick := pickMixed(ctx, eligibleProviders, model, opts, tried)
 	if errPick != nil && model != "" && shouldRetrySchedulerPick(errPick) {
 		m.syncScheduler()
-		selected, providerKey, errPick = m.scheduler.pickMixed(ctx, eligibleProviders, model, opts, tried)
+		selected, providerKey, errPick = pickMixed(ctx, eligibleProviders, model, opts, tried)
 	}
 	if errPick != nil {
 		return nil, nil, "", errPick

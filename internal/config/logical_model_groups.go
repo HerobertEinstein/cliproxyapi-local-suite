@@ -30,16 +30,17 @@ type LogicalModelGroups struct {
 }
 
 type LogicalModelCurrent struct {
-	Alias          string                     `yaml:"alias,omitempty" json:"alias,omitempty"`
-	Ref            string                     `yaml:"ref,omitempty" json:"ref,omitempty"`
-	LegacyTarget   string                     `yaml:"target,omitempty" json:"-"`
+	Alias           string                     `yaml:"alias,omitempty" json:"alias,omitempty"`
+	Ref             string                     `yaml:"ref,omitempty" json:"ref,omitempty"`
+	LegacyTarget    string                     `yaml:"target,omitempty" json:"-"`
 	LegacyReasoning LogicalModelGroupReasoning `yaml:"reasoning,omitempty" json:"-"`
 }
 
 type LogicalModelGroup struct {
-	Alias     string                     `yaml:"alias,omitempty" json:"alias,omitempty"`
-	Target    string                     `yaml:"target" json:"target"`
-	Reasoning LogicalModelGroupReasoning `yaml:"reasoning,omitempty" json:"reasoning,omitempty"`
+	Alias              string                     `yaml:"alias,omitempty" json:"alias,omitempty"`
+	Target             string                     `yaml:"target" json:"target"`
+	Reasoning          LogicalModelGroupReasoning `yaml:"reasoning,omitempty" json:"reasoning,omitempty"`
+	PreferredProviders []string                   `yaml:"preferred-providers,omitempty" json:"preferred-providers,omitempty"`
 }
 
 type LogicalModelGroupReasoning struct {
@@ -180,28 +181,16 @@ func (cfg *Config) ProjectedOAuthModelAliasTable() map[string][]OAuthModelAlias 
 }
 
 func (cfg *Config) ResolveLogicalModelGroup(requestedModel string) string {
-	requestedModel = strings.TrimSpace(requestedModel)
-	if cfg == nil || requestedModel == "" {
+	group, requestResult, ok := cfg.resolveLogicalModelGroupEntry(requestedModel)
+	if !ok {
 		return ""
 	}
-	requestResult := thinking.ParseSuffix(requestedModel)
-	base := requestResult.ModelName
-	if base == "" {
-		base = requestedModel
-	}
-	candidates := []string{base}
-	if base != requestedModel {
-		candidates = append(candidates, requestedModel)
-	}
+	return preserveLogicalModelGroupSuffix(group.ResolvedTarget(), requestResult)
+}
 
-	for _, candidate := range candidates {
-		group, ok := cfg.findLogicalModelGroup(candidate)
-		if !ok {
-			continue
-		}
-		return preserveLogicalModelGroupSuffix(group.ResolvedTarget(), requestResult)
-	}
-	return ""
+func (cfg *Config) ResolveLogicalModelGroupEntry(requestedModel string) (LogicalModelGroup, bool) {
+	group, _, ok := cfg.resolveLogicalModelGroupEntry(requestedModel)
+	return group, ok
 }
 
 func (cfg *Config) resolveCurrentLogicalModelGroup() (LogicalModelGroup, bool) {
@@ -213,9 +202,10 @@ func (cfg *Config) resolveCurrentLogicalModelGroup() (LogicalModelGroup, bool) {
 		return LogicalModelGroup{}, false
 	}
 	return LogicalModelGroup{
-		Alias:     LogicalModelGroupAliasCurrent,
-		Target:    group.Target,
-		Reasoning: group.Reasoning,
+		Alias:              LogicalModelGroupAliasCurrent,
+		Target:             group.Target,
+		Reasoning:          group.Reasoning,
+		PreferredProviders: append([]string(nil), group.PreferredProviders...),
 	}, true
 }
 
@@ -259,10 +249,34 @@ func sanitizeLogicalModelGroup(group LogicalModelGroup, forcedAlias string, forc
 	group.Alias = strings.TrimSpace(group.Alias)
 	group.Target = strings.TrimSpace(group.Target)
 	group.Reasoning = normalizeLogicalModelGroupReasoning(group.Reasoning)
+	group.PreferredProviders = normalizeLogicalModelGroupPreferredProviders(group.PreferredProviders)
 	if forceAlias {
 		group.Alias = forcedAlias
 	}
 	return group
+}
+
+func normalizeLogicalModelGroupPreferredProviders(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func normalizeLogicalModelGroupReasoning(reasoning LogicalModelGroupReasoning) LogicalModelGroupReasoning {
@@ -287,4 +301,27 @@ func preserveLogicalModelGroupSuffix(resolved string, requestResult thinking.Suf
 		return resolved + "(" + requestResult.RawSuffix + ")"
 	}
 	return resolved
+}
+
+func (cfg *Config) resolveLogicalModelGroupEntry(requestedModel string) (LogicalModelGroup, thinking.SuffixResult, bool) {
+	requestedModel = strings.TrimSpace(requestedModel)
+	if cfg == nil || requestedModel == "" {
+		return LogicalModelGroup{}, thinking.SuffixResult{}, false
+	}
+	requestResult := thinking.ParseSuffix(requestedModel)
+	base := requestResult.ModelName
+	if base == "" {
+		base = requestedModel
+	}
+	candidates := []string{base}
+	if base != requestedModel {
+		candidates = append(candidates, requestedModel)
+	}
+	for _, candidate := range candidates {
+		group, ok := cfg.findLogicalModelGroup(candidate)
+		if ok {
+			return group, requestResult, true
+		}
+	}
+	return LogicalModelGroup{}, requestResult, false
 }

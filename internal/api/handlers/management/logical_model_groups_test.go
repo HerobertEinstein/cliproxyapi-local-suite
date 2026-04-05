@@ -1,6 +1,7 @@
 package management
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -205,5 +206,82 @@ logical-model-groups:
 	}
 	if _, exists := current["target"]; exists {
 		t.Fatalf("expected current target to stay hidden in API payload, got %#v", current)
+	}
+}
+
+func TestLogicalModelGroupMutationsRefreshRuntime(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name   string
+		seed   string
+		url    string
+		body   string
+		setup  func(*gin.Context)
+		invoke func(*Handler, *gin.Context)
+	}{
+		{
+			name: "put current",
+			seed: "logical-model-groups:\n  current:\n    ref: gpt-5.2\n  static:\n    - alias: gpt-5.2\n      target: gpt-5.2\n    - alias: gpt-5.4\n      target: gpt-5.4\n",
+			url:  "/v0/management/logical-model-groups/current",
+			body: `{"ref":"gpt-5.4"}`,
+			invoke: func(h *Handler, ctx *gin.Context) {
+				h.PutLogicalModelGroupCurrent(ctx)
+			},
+		},
+		{
+			name: "post static",
+			seed: "logical-model-groups:\n  current:\n    ref: gpt-5.2\n  static:\n    - alias: gpt-5.2\n      target: gpt-5.2\n",
+			url:  "/v0/management/logical-model-groups/static",
+			body: `{"alias":"gpt-5.4","target":"gpt-5.4"}`,
+			invoke: func(h *Handler, ctx *gin.Context) {
+				h.PostLogicalModelGroupStatic(ctx)
+			},
+		},
+		{
+			name: "delete static",
+			seed: "logical-model-groups:\n  current:\n    ref: gpt-5.2\n  static:\n    - alias: gpt-5.2\n      target: gpt-5.2\n    - alias: gpt-5.4\n      target: gpt-5.4\n",
+			url:  "/v0/management/logical-model-groups/static/gpt-5.4",
+			setup: func(ctx *gin.Context) {
+				ctx.Params = append(ctx.Params, gin.Param{Key: "alias", Value: "gpt-5.4"})
+			},
+			invoke: func(h *Handler, ctx *gin.Context) {
+				h.DeleteLogicalModelGroupStatic(ctx)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(configPath, []byte(tt.seed), 0o600); err != nil {
+				t.Fatalf("failed to seed config: %v", err)
+			}
+
+			h := NewHandler(mustLoadManagementLogicalModelGroupsConfig(t, tt.seed), configPath, nil)
+			refreshCalls := 0
+			h.SetRuntimeRefreshHook(func(context.Context) {
+				refreshCalls++
+			})
+
+			rec := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(rec)
+			ctx.Request = httptest.NewRequest(http.MethodPost, tt.url, strings.NewReader(tt.body))
+			if tt.body != "" {
+				ctx.Request.Header.Set("Content-Type", "application/json")
+			}
+			if tt.setup != nil {
+				tt.setup(ctx)
+			}
+
+			tt.invoke(h, ctx)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status %d, got %d with body %s", http.StatusOK, rec.Code, rec.Body.String())
+			}
+			if refreshCalls != 1 {
+				t.Fatalf("expected runtime refresh hook once, got %d", refreshCalls)
+			}
+		})
 	}
 }

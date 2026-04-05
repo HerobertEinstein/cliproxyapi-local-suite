@@ -44,7 +44,7 @@ func (h *Handler) PutLogicalModelGroupCurrent(c *gin.Context) {
 	h.cfg.LogicalModelGroups.Current.Alias = config.LogicalModelGroupAliasCurrent
 	h.cfg.LogicalModelGroups.Current.Ref = ref
 	h.cfg.SanitizeLogicalModelGroups()
-	h.persist(c)
+	h.persistWithRuntimeRefresh(c)
 }
 
 func (h *Handler) PostLogicalModelGroupStatic(c *gin.Context) {
@@ -75,7 +75,7 @@ func (h *Handler) PostLogicalModelGroupStatic(c *gin.Context) {
 		h.cfg.LogicalModelGroups.Static = append(h.cfg.LogicalModelGroups.Static, body)
 	}
 	h.cfg.SanitizeLogicalModelGroups()
-	h.persist(c)
+	h.persistWithRuntimeRefresh(c)
 }
 
 func (h *Handler) DeleteLogicalModelGroupStatic(c *gin.Context) {
@@ -114,7 +114,7 @@ func (h *Handler) DeleteLogicalModelGroupStatic(c *gin.Context) {
 	}
 	h.cfg.LogicalModelGroups.Static = filtered
 	h.cfg.SanitizeLogicalModelGroups()
-	h.persist(c)
+	h.persistWithRuntimeRefresh(c)
 }
 
 func ensureLogicalModelGroupsConfig(h *Handler) {

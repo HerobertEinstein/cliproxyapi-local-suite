@@ -308,6 +308,12 @@ func (h *Handler) persistWithConfigProviderRefresh(c *gin.Context, keys []string
 	return h.persistWithConfigProviderRefreshPlan(c, configProviderRefreshPlan{RescanKeys: keys})
 }
 
+// persistWithRuntimeRefresh saves config and synchronously refreshes runtime state
+// without triggering provider discovery rescan.
+func (h *Handler) persistWithRuntimeRefresh(c *gin.Context) bool {
+	return h.persistWithConfigProviderRefreshPlan(c, configProviderRefreshPlan{})
+}
+
 func (h *Handler) persistWithConfigProviderRefreshPlan(c *gin.Context, plan configProviderRefreshPlan) bool {
 	if err := h.saveConfig(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to save config: %v", err)})

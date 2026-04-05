@@ -2,10 +2,15 @@ package cliproxy
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	internalconfig "github.com/router-for-me/CLIProxyAPI/v6/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/modeldiscovery"
@@ -203,6 +208,108 @@ func TestRefreshAllModelRegistrations_LogicalCurrentSwitchesTargetOnConfigReload
 	}
 }
 
+func TestServiceRun_LogicalModelGroupMutationRefreshesModelsImmediately(t *testing.T) {
+	port := reserveTCPPort(t)
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	authDir := filepath.Join(tmpDir, "auth")
+	t.Setenv("MANAGEMENT_PASSWORD", "local-password")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte("port: 0\n"), 0o600); err != nil {
+		t.Fatalf("seed config file: %v", err)
+	}
+	if err := os.MkdirAll(authDir, 0o700); err != nil {
+		t.Fatalf("mkdir auth dir: %v", err)
+	}
+
+	cfg := &config.Config{
+		SDKConfig: config.SDKConfig{
+			APIKeys: []string{"client-key"},
+		},
+		Host:                   "127.0.0.1",
+		Port:                   port,
+		AuthDir:                authDir,
+		Debug:                  true,
+		LoggingToFile:          false,
+		UsageStatisticsEnabled: false,
+		CodexKey: []config.CodexKey{
+			{
+				APIKey: "codex-key",
+				Models: []internalconfig.CodexModel{
+					{Name: "gpt-5.4"},
+				},
+			},
+		},
+		LogicalModelGroups: config.LogicalModelGroups{
+			Current: config.LogicalModelCurrent{Ref: "gpt-5.4"},
+			Static: []config.LogicalModelGroup{
+				{Alias: "gpt-5.4", Target: "gpt-5.4"},
+			},
+		},
+	}
+	cfg.SanitizeLogicalModelGroups()
+	if err := config.SaveConfigPreserveComments(configPath, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	service, err := NewBuilder().
+		WithConfig(cfg).
+		WithConfigPath(configPath).
+		WithLocalManagementPassword("local-password").
+		Build()
+	if err != nil {
+		t.Fatalf("build service: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = service.Run(ctx)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitForHTTPStatus(t, baseURL+"/healthz", nil, http.StatusOK)
+	waitForModelID(t, baseURL, "client-key", "current")
+
+	alias := "tmp-runtime-refresh-integration"
+	t.Cleanup(func() {
+		req, err := http.NewRequest(http.MethodDelete, baseURL+"/v0/management/logical-model-groups/static/"+alias, nil)
+		if err != nil {
+			return
+		}
+		req.Header.Set("Authorization", "Bearer local-password")
+		_, _ = http.DefaultClient.Do(req)
+	})
+
+	body := strings.NewReader(`{"alias":"` + alias + `","target":"gpt-5.4","reasoning":{"mode":"request"}}`)
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/v0/management/logical-model-groups/static", body)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer local-password")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post logical group: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from management mutation, got %d", resp.StatusCode)
+	}
+
+	models := fetchModelIDs(t, baseURL, "client-key")
+	if !containsString(models, alias) {
+		t.Fatalf("expected /v1/models to include %q immediately after mutation, got %#v", alias, models)
+	}
+}
+
 func TestRegisterModelsForAuth_APIKeyLogicalModelGroups_PrefersConfigLocatorForDuplicateCodexKeys(t *testing.T) {
 	service := &Service{
 		cfg: &config.Config{
@@ -262,6 +369,107 @@ func TestRegisterModelsForAuth_APIKeyLogicalModelGroups_PrefersConfigLocatorForD
 	if registry.ClientSupportsModel(auth.ID, "gpt-5.2") {
 		t.Fatal("did not expect second duplicated auth to inherit the first entry model")
 	}
+}
+
+func reserveTCPPort(t *testing.T) int {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen tcp: %v", err)
+	}
+	defer listener.Close()
+	addr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("unexpected listener addr type %T", listener.Addr())
+	}
+	return addr.Port
+}
+
+func waitForHTTPStatus(t *testing.T, url string, headers map[string]string, expected int) {
+	t.Helper()
+
+	deadline := time.Now().Add(10 * time.Second)
+	var lastStatus int
+	var lastErr error
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		for key, value := range headers {
+			req.Header.Set(key, value)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil {
+			lastStatus = resp.StatusCode
+			resp.Body.Close()
+			if resp.StatusCode == expected {
+				return
+			}
+		} else {
+			lastErr = err
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s status %d (last status=%d err=%v)", url, expected, lastStatus, lastErr)
+}
+
+func waitForModelID(t *testing.T, baseURL, apiKey, want string) {
+	t.Helper()
+
+	deadline := time.Now().Add(10 * time.Second)
+	var last []string
+	for time.Now().Before(deadline) {
+		last = fetchModelIDs(t, baseURL, apiKey)
+		if containsString(last, want) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for model %q, last models=%#v", want, last)
+}
+
+func fetchModelIDs(t *testing.T, baseURL, apiKey string) []string {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodGet, baseURL+"/v1/models", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("get models: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get models status=%d", resp.StatusCode)
+	}
+	var payload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode models: %v", err)
+	}
+	ids := make([]string, 0, len(payload.Data))
+	for _, item := range payload.Data {
+		if strings.TrimSpace(item.ID) != "" {
+			ids = append(ids, item.ID)
+		}
+	}
+	return ids
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if strings.EqualFold(strings.TrimSpace(item), strings.TrimSpace(want)) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRegisterModelsForAuth_OpenAICompatibilityEmptyModels_UsesLogicalModelGroups(t *testing.T) {

@@ -12,6 +12,12 @@
 
 这个仓库是个人本地套件分支，不是官方上游仓库。
 
+### 维护分支说明
+
+- 当前个人发布分支：`release/cpa-local-suite`
+- 本地上游跟踪分支：`track/upstream-main`（仅用于跟踪/对照，不是发布入口）
+- `repo-clean` / `feature/recutover-migrate` 之类历史回捞来源不是当前发布入口
+
 相较于上游 CLIProxyAPI，这个分支更侧重本地 Windows 使用、脚本化维护，以及更安全的自托管路由能力：
 
 - 逻辑模型组：保留动态指针 `current`，并支持可编辑的静态组

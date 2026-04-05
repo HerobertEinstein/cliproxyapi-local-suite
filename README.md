@@ -12,6 +12,12 @@ So you can use local or multi-account CLI access with OpenAI(include Responses)/
 
 This repository is a personal local-suite fork, not the official upstream repository.
 
+### Maintenance branch layout
+
+- active release branch for this fork: `release/cpa-local-suite`
+- local upstream tracking branch: `track/upstream-main` (tracking/reference only, not the release entry)
+- historical recovery sources such as `repo-clean` / `feature/recutover-migrate` are not the current release entry
+
 Compared with upstream CLIProxyAPI, this fork is focused on local Windows usage, scriptable maintenance, and safer self-hosted routing:
 
 - logical model groups with a reserved dynamic pointer `current` plus editable static groups
